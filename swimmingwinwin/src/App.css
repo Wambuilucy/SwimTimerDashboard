@@ -2,4 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes swim {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(90vw); }
+}
 
+.animate-swim {
+  animation: swim 7s linear forwards;
+}
