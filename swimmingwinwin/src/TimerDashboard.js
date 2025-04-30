@@ -58,10 +58,8 @@ const SwimTimerDashboard = () => {
   const [timers, setTimers] = useState(initialTimers);
   const [running, setRunning] = useState(false);
   const intervalRef = useRef(null);
-  const startTimeRef = useRef(null);
-  const [rounds, setRounds] = useState(1);
+  const animationIntervalRef = useRef(null);
   const [swimProgress, setSwimProgress] = useState([0, 0, 0, 0]);
-  const [animationInterval, setAnimationInterval] = useState(null);
   const [scoreboard, setScoreboard] = useState([]);
   const [timerColor, setTimerColor] = useState('border-gray-300');
 
@@ -70,41 +68,32 @@ const SwimTimerDashboard = () => {
   useEffect(() => {
     return () => {
       clearInterval(intervalRef.current);
-      clearInterval(animationInterval);
+      clearInterval(animationIntervalRef.current);
     };
   }, []);
 
-  const handleStart = () => {
-    clearInterval(intervalRef.current);
-    clearInterval(animationInterval);
-    setTimers(prev => prev.map(t => ({ ...t, time: 0, finished: false })));
-    setSwimProgress([0, 0, 0, 0]);
-    setScoreboard([]);
-    setRunning(true);
-    setTimerColor('border-green-500');
-    startTimeRef.current = Date.now();
-
+  const startTimers = () => {
+    const startTime = Date.now();
     intervalRef.current = setInterval(() => {
       const now = Date.now();
       setTimers(prev =>
-        prev.map((t, index) =>
-          t.finished ? t : { ...t, time: (now - startTimeRef.current) * swimRates.current[index] }
-        )
+        prev.map((t, i) => t.finished ? t : {
+          ...t,
+          time: t.time + (now - startTime) * swimRates.current[i] / 100
+        })
       );
-    }, 10);
+    }, 100);
 
-    const swimAnim = setInterval(() => {
+    animationIntervalRef.current = setInterval(() => {
       setSwimProgress(prev =>
-        prev.map((progress, index) => {
-          if (timers[index].finished) return progress;
-          let newProgress = progress + 1 / swimRates.current[index];
-          if (newProgress >= 100 * rounds) {
-            newProgress = 100 * rounds;
+        prev.map((progress, i) => {
+          if (timers[i].finished) return progress;
+          let newProgress = progress + 0.7 * swimRates.current[i];
+          if (newProgress >= 98) {
+            newProgress = 98;
             setTimers(t => {
-              const now = Date.now();
               const updated = [...t];
-              updated[index].time = (now - startTimeRef.current) * swimRates.current[index];
-              updated[index].finished = true;
+              updated[i].finished = true;
               return updated;
             });
           }
@@ -112,28 +101,41 @@ const SwimTimerDashboard = () => {
         })
       );
     }, 70);
+  };
 
-    setAnimationInterval(swimAnim);
+  const handleStart = () => {
+    clearInterval(intervalRef.current);
+    clearInterval(animationIntervalRef.current);
+    setTimers(t => t.map(timer => ({ ...timer, time: 0, finished: false })));
+    setSwimProgress([0, 0, 0, 0]);
+    setScoreboard([]);
+    setRunning(true);
+    setTimerColor('border-green-500');
+    startTimers();
+  };
+
+  const handleContinue = () => {
+    if (running) return;
+    setRunning(true);
+    setTimerColor('border-blue-500');
+    startTimers();
   };
 
   const handleStopAll = () => {
     clearInterval(intervalRef.current);
-    clearInterval(animationInterval);
-    const now = Date.now();
+    clearInterval(animationIntervalRef.current);
+    setRunning(false);
     setTimerColor('border-red-500');
-
-    setTimers(prev => {
-      const updated = prev.map((t, i) => {
-        if (!t.finished) {
-          return { ...t, time: (now - startTimeRef.current) * swimRates.current[i], finished: true };
+    setTimers(t => {
+      const updated = t.map((timer, i) => {
+        if (!timer.finished && swimProgress[i] >= 98) {
+          return { ...timer, finished: true };
         }
-        return t;
+        return timer;
       });
       setScoreboard(updated);
       return updated;
     });
-
-    setRunning(false);
   };
 
   const handleNameChange = (laneNumber, name) => {
@@ -147,7 +149,6 @@ const SwimTimerDashboard = () => {
   const getSwimmerStatus = (lane) => {
     const finishedTimers = timers.filter(t => t.finished);
     if (finishedTimers.length < 4) return '';
-
     const sorted = [...finishedTimers].sort((a, b) => a.time - b.time);
     if (sorted[0].lane === lane) return 'fastest';
     if (sorted[3].lane === lane) return 'slowest';
@@ -165,18 +166,17 @@ const SwimTimerDashboard = () => {
             START
           </button>
           <button
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl shadow-md text-lg transition"
+            onClick={handleContinue}
+          >
+            CONTINUE
+          </button>
+          <button
             className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl shadow-md text-lg transition"
             onClick={handleStopAll}
           >
             STOP ALL
           </button>
-          <select
-            value={rounds}
-            onChange={e => setRounds(Number(e.target.value))}
-            className="ml-4 px-3 py-2 border rounded-md"
-          >
-            {[1, 2, 3, 4].map(n => <option key={n} value={n}>{n} Rounds</option>)}
-          </select>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
@@ -209,7 +209,7 @@ const SwimTimerDashboard = () => {
                 className="absolute text-2xl"
                 style={{
                   top: `${index * 72 + 20}px`,
-                  left: `${Math.min(progress, 100 * rounds)}%`,
+                  left: `${Math.min(progress, 98)}%`,
                   transition: 'left 0.07s linear',
                   zIndex: 20,
                 }}
